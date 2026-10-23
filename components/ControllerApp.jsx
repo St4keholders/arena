@@ -46,7 +46,11 @@ export default function ControllerApp() {
     ac: 0,
     pc: 0,
     bc: 0,
+    jc: 0,
     def: null,
+    cy: Math.PI,
+    cp: -0.22,
+    cq: [0, 1, 0, 0],
   });
 
   useEffect(() => {
@@ -193,7 +197,7 @@ export default function ControllerApp() {
     }
   };
 
-  // Bucle de envío de inputs de mando cada 33ms
+  // Bucle de envío de inputs de mando cada 33ms (joystick -> RigidBody Rapier + rotación cuaterniónica de cámara)
   useEffect(() => {
     const id = setInterval(() => {
       if (phaseRef.current !== 'playing') return;
@@ -206,7 +210,11 @@ export default function ControllerApp() {
         ac: i.ac,
         pc: i.pc,
         bc: i.bc,
+        jc: i.jc,
         def: i.def,
+        cy: i.cy,
+        cp: i.cp,
+        cq: i.cq,
       });
     }, 33);
     return () => clearInterval(id);
@@ -305,6 +313,9 @@ export default function ControllerApp() {
         }}
         onTriggerAttack={() => {
           inpRef.current.ac++;
+        }}
+        onTriggerJump={() => {
+          inpRef.current.jc++;
         }}
         onTriggerPower={() => {
           inpRef.current.pc++;

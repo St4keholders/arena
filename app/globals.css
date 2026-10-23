@@ -1331,3 +1331,521 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   FASE 2: PESTAÑAS DEL LOBBY, INSTRUCCIONES, RETÍCULA 3RA PERSONA Y <HTML> 3D
+   ========================================================================== */
+
+.lobby-top-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-glow);
+  border-radius: 14px;
+  padding: 0.65rem 1.1rem;
+  backdrop-filter: blur(12px);
+}
+
+.lobby-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: rgba(8, 5, 18, 0.85);
+  padding: 0.3rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.lobby-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 140ms var(--ease-spring), background 160ms var(--ease-out-quart),
+    color 160ms var(--ease-out-quart), border-color 160ms var(--ease-out-quart);
+}
+
+.lobby-tab-btn:hover {
+  color: var(--text-main);
+}
+
+.lobby-tab-btn:active {
+  transform: scale(0.96);
+}
+
+.lobby-tab-btn.active {
+  background: linear-gradient(135deg, rgba(0, 245, 255, 0.25), rgba(180, 0, 255, 0.25));
+  border-color: var(--neon-cyan);
+  color: var(--text-main);
+  box-shadow: 0 0 14px rgba(0, 245, 255, 0.28);
+}
+
+/* Panel Flotante de la Pestaña "Instrucciones" */
+.instructions-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0.65rem 0;
+  padding-right: 0.25rem;
+  animation: fadeSlideUp 220ms var(--ease-out-quart);
+}
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.inst-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
+  gap: 0.95rem;
+  align-items: stretch;
+}
+
+.inst-card {
+  background: rgba(14, 9, 28, 0.92);
+  border: 1px solid var(--border-glow);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  box-shadow: 0 0 24px rgba(0, 245, 255, 0.1);
+}
+
+.inst-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border-bottom: 1px solid rgba(0, 245, 255, 0.22);
+  padding-bottom: 0.5rem;
+}
+
+.inst-card-header h3 {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: var(--neon-cyan);
+}
+
+.inst-icon {
+  font-size: 1.15rem;
+}
+
+.control-block {
+  background: rgba(6, 4, 15, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+}
+
+.control-block h4 {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--neon-magenta);
+  letter-spacing: 0.08em;
+}
+
+.control-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.control-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  line-height: 1.35;
+}
+
+.control-list kbd {
+  background: rgba(0, 245, 255, 0.15);
+  border: 1px solid rgba(0, 245, 255, 0.45);
+  color: var(--text-main);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 0.1rem 0.38rem;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+/* Lista de Estadísticas de Clases en Instrucciones */
+.inst-classes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.inst-class-item {
+  background: rgba(7, 5, 16, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 3px solid var(--cc, var(--neon-cyan));
+  border-radius: 9px;
+  padding: 0.55rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.inst-class-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.inst-class-role {
+  display: block;
+  font-size: 0.66rem;
+  color: var(--text-muted);
+}
+
+.inst-stat-pills {
+  display: flex;
+  gap: 0.28rem;
+  flex-wrap: wrap;
+}
+
+.inst-stat-pills span {
+  font-size: 0.64rem;
+  font-weight: 800;
+  padding: 0.1rem 0.38rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+}
+
+.inst-bars-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.45rem;
+}
+
+.inst-mini-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.inst-bar {
+  flex: 1;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.inst-bar > div {
+  height: 100%;
+  border-radius: 99px;
+}
+
+.inst-class-skills {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+/* Explicación del Cristal de Éter y Loop */
+.ether-explain-box {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  background: rgba(0, 245, 255, 0.08);
+  border: 1px solid rgba(0, 245, 255, 0.32);
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+
+.ether-gem-badge {
+  font-size: 1.8rem;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 14px var(--neon-cyan);
+  line-height: 1;
+}
+
+.ether-explain-box h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.78rem;
+  color: var(--neon-cyan);
+}
+
+.ether-explain-box p {
+  margin: 0;
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.loop-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  flex: 1;
+}
+
+.loop-step {
+  background: rgba(7, 5, 16, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
+}
+
+.loop-step.forge {
+  border-left: 3px solid var(--neon-cyan);
+}
+
+.loop-step.horde {
+  border-left: 3px solid var(--neon-magenta);
+}
+
+.step-tag {
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: var(--text-main);
+}
+
+.loop-step p {
+  margin: 0.25rem 0 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.38;
+}
+
+/* Retícula de Apuntado en 3ra Persona (HUD Central) */
+.third-person-reticle {
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.reticle-ring {
+  width: 34px;
+  height: 34px;
+  border: 2px solid rgba(0, 245, 255, 0.75);
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(0, 245, 255, 0.45), inset 0 0 8px rgba(255, 0, 127, 0.35);
+}
+
+.reticle-dot {
+  position: absolute;
+  top: 15px;
+  width: 4px;
+  height: 4px;
+  background: var(--neon-magenta);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--neon-magenta);
+}
+
+.reticle-label {
+  margin-top: 0.35rem;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: rgba(0, 245, 255, 0.75);
+  text-shadow: 0 1px 3px #000;
+}
+
+.hud-hero-card {
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 140ms var(--ease-spring), border-color 140ms;
+}
+
+.hud-hero-card.cam-focus {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 16px rgba(0, 245, 255, 0.25);
+}
+
+.hud-help-modal {
+  pointer-events: auto;
+  max-height: 76dvh;
+  overflow-y: auto;
+}
+
+/* Superposiciones <Html> de Drei para Barras de Vida sobre Enemigos, Torretas y Héroes */
+.entity-html-tag {
+  pointer-events: none;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transform: translateY(-4px);
+}
+
+.eh-badge {
+  font-size: 10px;
+  font-weight: 900;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--c, var(--neon-cyan));
+  color: #05030a;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.7);
+}
+
+.eh-enemy-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 1px 3px #000;
+}
+
+.eh-bar-track {
+  width: 48px;
+  height: 6px;
+  background: rgba(5, 3, 12, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 99px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+.enemy-tag.colossus .eh-bar-track {
+  width: 72px;
+  height: 8px;
+  border-color: var(--neon-purple);
+}
+
+.enemy-tag.golem .eh-bar-track {
+  width: 58px;
+  height: 7px;
+}
+
+.eh-bar-fill {
+  height: 100%;
+  transition: width 120ms linear;
+}
+
+.eh-bar-fill.hp {
+  background: linear-gradient(90deg, #00e676, #39ff14);
+}
+
+.eh-bar-fill.enemy {
+  background: linear-gradient(90deg, #ff1744, #ff007f);
+}
+
+/* Touchpad de Cámara en 3ra Persona y Botón de Salto en Celular (/mando) */
+.cam-look-pad {
+  position: relative;
+  flex: 1;
+  min-height: 88px;
+  background: radial-gradient(circle at 50% 50%, rgba(0, 245, 255, 0.12), rgba(12, 8, 26, 0.88));
+  border: 1px dashed rgba(0, 245, 255, 0.42);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.75rem;
+  touch-action: none;
+  transition: border-color 140ms, box-shadow 140ms;
+}
+
+.cam-look-pad.compact {
+  flex: 0 0 auto;
+  min-height: 40px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: var(--neon-cyan);
+}
+
+.cam-look-pad.active {
+  border-style: solid;
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 18px rgba(0, 245, 255, 0.3);
+}
+
+.cam-pad-reticle {
+  font-size: 1.5rem;
+  color: var(--neon-cyan);
+  opacity: 0.8;
+}
+
+.cam-pad-txt {
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.cam-pad-txt span {
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: var(--neon-cyan);
+}
+
+.cam-pad-txt small {
+  font-size: 0.64rem;
+  color: var(--text-muted);
+}
+
+.combat-cluster-3p {
+  display: grid;
+  grid-template-columns: 1fr 0.9fr 1.25fr;
+  gap: 0.55rem;
+  min-height: 112px;
+}
+
+.jump-btn {
+  background: radial-gradient(circle at 50% 40%, rgba(57, 255, 20, 0.28), rgba(14, 24, 18, 0.94));
+  border: 2px solid var(--neon-green);
+  box-shadow: 0 0 16px rgba(57, 255, 20, 0.22);
+}
+
+.jump-icon {
+  font-size: 1.45rem;
+  color: var(--neon-green);
+}
+
+.jump-title {
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+@media (max-width: 1100px) {
+  .inst-grid {
+    grid-template-columns: 1fr;
+  }
+}

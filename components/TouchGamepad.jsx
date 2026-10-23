@@ -1,6 +1,7 @@
 'use client';
 import { useRef, useState, useEffect } from 'react';
 import { SLOT_NAMES, charById, defenseById } from '../game/constants';
+import { eulerToQuat } from '../game/mirror';
 
 export default function TouchGamepad({
   slot,
@@ -13,6 +14,7 @@ export default function TouchGamepad({
   onSelectDefense,
   onPlaceDefense,
   onTriggerAttack,
+  onTriggerJump,
   onTriggerPower,
   onStartHorde,
   onPause,
@@ -25,8 +27,12 @@ export default function TouchGamepad({
 
   const [wheelOpen, setWheelOpen] = useState(true);
   const [joyVis, setJoyVis] = useState({ active: false, ox: 0, oy: 0, dx: 0, dy: 0 });
+  const [camLookActive, setCamLookActive] = useState(false);
+
   const joyTouchId = useRef(null);
   const joyOrigin = useRef({ x: 0, y: 0 });
+  const camTouchId = useRef(null);
+  const camLastPos = useRef({ x: 0, y: 0 });
 
   // Abrir automáticamente la rueda de construcción al entrar en Fase de Forja
   useEffect(() => {
@@ -38,13 +44,15 @@ export default function TouchGamepad({
   const canAfford = (h.mana ?? 100) >= (selectedDef?.cost || 0);
   const holoOk = h.holoValid !== false && canAfford;
 
-  // --------- Joystick Dinámico Invisible (Izquierda) ---------
+  // --------- Lado Izquierdo: Joystick Virtual para Movimiento Direccional (RigidBody Rapier) ---------
   const handleJoyDown = (e) => {
     if (joyTouchId.current !== null) return;
     e.preventDefault();
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
-    } catch (err) { /* nada */ }
+    } catch (err) {
+      /* nada */
+    }
     const rect = e.currentTarget.getBoundingClientRect();
     const ox = e.clientX - rect.left;
     const oy = e.clientY - rect.top;
@@ -83,13 +91,53 @@ export default function TouchGamepad({
     setJoyVis({ active: false, ox: 0, oy: 0, dx: 0, dy: 0 });
   };
 
-  // --------- Botones de Acción (Derecha) ---------
+  // --------- Lado Derecho: Área Táctil para Rotar la Cámara (3ra Persona) ---------
+  const handleCamDown = (e) => {
+    if (camTouchId.current !== null) return;
+    e.preventDefault();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (err) {
+      /* nada */
+    }
+    camTouchId.current = e.pointerId;
+    camLastPos.current = { x: e.clientX, y: e.clientY };
+    setCamLookActive(true);
+  };
+
+  const handleCamMove = (e) => {
+    if (camTouchId.current !== e.pointerId) return;
+    const dx = e.clientX - camLastPos.current.x;
+    const dy = e.clientY - camLastPos.current.y;
+    camLastPos.current = { x: e.clientX, y: e.clientY };
+
+    const nextYaw = (inpRef.current.cy ?? Math.PI) - dx * 0.011;
+    const nextPitch = Math.max(
+      -0.75,
+      Math.min(0.42, (inpRef.current.cp ?? -0.22) - dy * 0.008)
+    );
+    inpRef.current.cy = nextYaw;
+    inpRef.current.cp = nextPitch;
+    inpRef.current.cq = eulerToQuat(nextPitch, nextYaw, 0);
+  };
+
+  const handleCamUp = (e) => {
+    if (camTouchId.current !== e.pointerId) return;
+    camTouchId.current = null;
+    setCamLookActive(false);
+  };
+
+  // --------- Botones de Acción (Ataque, Salto y Habilidad Especial) ---------
   const handleAttackDown = (e) => {
     e.preventDefault();
     inpRef.current.atk = true;
     onTriggerAttack && onTriggerAttack();
     if (navigator.vibrate) {
-      try { navigator.vibrate(10); } catch (err) { /* nada */ }
+      try {
+        navigator.vibrate(10);
+      } catch (err) {
+        /* nada */
+      }
     }
   };
 
@@ -98,7 +146,22 @@ export default function TouchGamepad({
     inpRef.current.atk = false;
   };
 
-  const hpPct = Math.max(0, Math.min(100, ((h.hp ?? ch.stats.hp) / (h.maxHp || ch.stats.hp)) * 100));
+  const handleJumpTap = (e) => {
+    e.preventDefault();
+    onTriggerJump && onTriggerJump();
+    if (navigator.vibrate) {
+      try {
+        navigator.vibrate(8);
+      } catch (err) {
+        /* nada */
+      }
+    }
+  };
+
+  const hpPct = Math.max(
+    0,
+    Math.min(100, ((h.hp ?? ch.stats.hp) / (h.maxHp || ch.stats.hp)) * 100)
+  );
   const manaPct = Math.max(0, Math.min(100, ((h.mana ?? 120) / (h.maxMana || 180)) * 100));
   const powerPct = Math.max(0, Math.min(100, h.powerCharge || 0));
   const powerReady = powerPct >= 100;
@@ -113,13 +176,27 @@ export default function TouchGamepad({
         </div>
 
         <div className="tpad-bars">
-          <div className="stat-bar hp" role="progressbar" aria-label="Vida" aria-valuenow={h.hp ?? ch.stats.hp}>
+          <div
+            className="stat-bar hp"
+            role="progressbar"
+            aria-label="Vida"
+            aria-valuenow={h.hp ?? ch.stats.hp}
+          >
             <div className="stat-fill" style={{ width: `${hpPct}%` }} />
-            <span className="stat-txt">HP {h.hp ?? ch.stats.hp}/{h.maxHp ?? ch.stats.hp}</span>
+            <span className="stat-txt">
+              HP {h.hp ?? ch.stats.hp}/{h.maxHp ?? ch.stats.hp}
+            </span>
           </div>
-          <div className="stat-bar mana" role="progressbar" aria-label="Maná" aria-valuenow={h.mana ?? 120}>
+          <div
+            className="stat-bar mana"
+            role="progressbar"
+            aria-label="Maná"
+            aria-valuenow={h.mana ?? 120}
+          >
             <div className="stat-fill" style={{ width: `${manaPct}%` }} />
-            <span className="stat-txt">ÉTER {h.mana ?? 120}/{h.maxMana ?? 180}</span>
+            <span className="stat-txt">
+              ÉTER {h.mana ?? 120}/{h.maxMana ?? 180}
+            </span>
           </div>
         </div>
 
@@ -136,9 +213,9 @@ export default function TouchGamepad({
       {/* Mensaje flotante de evento */}
       {h.msg && <div className="tpad-toast">{h.msg}</div>}
 
-      {/* Cuerpo del controlador dividido en Zona Izquierda (Joystick) y Zona Derecha (Forja / Horda) */}
+      {/* Cuerpo del controlador dividido en Zona Izquierda (Joystick) y Zona Derecha (Cámara + Acción / Forja) */}
       <div className="tpad-body">
-        {/* ZONA IZQUIERDA: Joystick Dinámico Invisible */}
+        {/* ZONA IZQUIERDA: Joystick Virtual para Movimiento Direccional */}
         <div
           className="tpad-left-zone"
           onPointerDown={handleJoyDown}
@@ -148,8 +225,8 @@ export default function TouchGamepad({
           onContextMenu={(e) => e.preventDefault()}
         >
           <div className="joy-hint">
-            <span>✢ MOVIMIENTO 3D</span>
-            <small>Toca y desliza en cualquier punto de este lado</small>
+            <span>✢ JOYSTICK DE MOVIMIENTO 3D</span>
+            <small>Impulsa el RigidBody respecto a la cámara</small>
           </div>
           {joyVis.active && (
             <div
@@ -166,7 +243,7 @@ export default function TouchGamepad({
           )}
         </div>
 
-        {/* ZONA DERECHA: Rueda de Construcción (Fase de Forja) o Botones de Combate (Fase de Horda) */}
+        {/* ZONA DERECHA: Área Táctil de Cámara + Botones de Ataque, Salto, Especial y Forja */}
         <div className="tpad-right-zone">
           {isForge ? (
             <div className="forge-panel">
@@ -179,7 +256,11 @@ export default function TouchGamepad({
                   ⚙ RUEDA DE CONSTRUCCIÓN {wheelOpen ? '▾' : '▸'}
                 </button>
                 <span className={`holo-status ${holoOk ? 'ok' : 'bad'}`}>
-                  {holoOk ? '● HOLOGRAMA VÁLIDO' : !canAfford ? '● MANÁ INSUFICIENTE' : '● ESPACIO BLOQUEADO'}
+                  {holoOk
+                    ? '● HOLOGRAMA VÁLIDO'
+                    : !canAfford
+                    ? '● MANÁ INSUFICIENTE'
+                    : '● ESPACIO BLOQUEADO'}
                 </span>
               </div>
 
@@ -192,7 +273,9 @@ export default function TouchGamepad({
                       <button
                         key={def.id}
                         type="button"
-                        className={`wheel-slice ${active ? 'selected' : ''} ${!affordable ? 'dim' : ''}`}
+                        className={`wheel-slice ${active ? 'selected' : ''} ${
+                          !affordable ? 'dim' : ''
+                        }`}
                         style={{ '--def-c': def.color }}
                         onClick={() => onSelectDefense && onSelectDefense(def.id)}
                       >
@@ -204,6 +287,17 @@ export default function TouchGamepad({
                   })}
                 </div>
               )}
+
+              {/* Touchpad táctil de orientación también disponible en Fase de Forja */}
+              <div
+                className={`cam-look-pad compact ${camLookActive ? 'active' : ''}`}
+                onPointerDown={handleCamDown}
+                onPointerMove={handleCamMove}
+                onPointerUp={handleCamUp}
+                onPointerCancel={handleCamUp}
+              >
+                <span>⟳ DESLIZA AQUÍ PARA GIRAR APUNTADO / CÁMARA</span>
+              </div>
 
               <div className="forge-actions">
                 <button
@@ -220,13 +314,13 @@ export default function TouchGamepad({
                   className="action-btn ready-horde-btn"
                   onClick={onStartHorde}
                 >
-                  ⚔ ¡INICIAR HORDA AHORA!
+                  ⚔ ¡INICIAR HORDA!
                 </button>
               </div>
             </div>
           ) : (
             <div className="horde-panel">
-              {/* Acceso desplegable rápido a la rueda de construcción si tiene maná en mitad de la horda */}
+              {/* Barra superior derecha: Acceso rápido a Forja en medio del combate */}
               <div className="horde-top-tools">
                 <button
                   type="button"
@@ -254,17 +348,47 @@ export default function TouchGamepad({
                 )}
               </div>
 
-              <div className="combat-Cluster">
-                {/* Botón de Habilidad Definitiva (Power) */}
+              {/* Área Táctil para rotar la cámara en 3ra persona deslizando el dedo */}
+              <div
+                className={`cam-look-pad ${camLookActive ? 'active' : ''}`}
+                onPointerDown={handleCamDown}
+                onPointerMove={handleCamMove}
+                onPointerUp={handleCamUp}
+                onPointerCancel={handleCamUp}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                <div className="cam-pad-reticle">⊕</div>
+                <div className="cam-pad-txt">
+                  <span>CÁMARA 3RA PERSONA</span>
+                  <small>Desliza el dedo para rotar vista y apuntar</small>
+                </div>
+              </div>
+
+              {/* Cluster de Combate: Habilidad Especial, Salto y Ataque Básico */}
+              <div className="combat-cluster-3p">
+                {/* Botón de Habilidad Especial (Definitiva) */}
                 <button
                   type="button"
                   className={`combat-btn ultimate-btn ${powerReady ? 'ready' : ''}`}
                   onClick={onTriggerPower}
                   disabled={!powerReady}
                 >
-                  <div className="ult-ring" style={{ '--p': `${powerPct}%` }} />
-                  <span className="ult-label">{powerReady ? '⚡ DEFINITIVA' : `${powerPct}%`}</span>
+                  <span className="ult-label">
+                    {powerReady ? '⚡ ESPECIAL' : `⚡ ${powerPct}%`}
+                  </span>
                   <small className="ult-name">{ch.powerName}</small>
+                </button>
+
+                {/* Botón de Salto (Impulso vertical en Rapier) */}
+                <button
+                  type="button"
+                  className="combat-btn jump-btn"
+                  onPointerDown={handleJumpTap}
+                  onContextMenu={(e) => e.preventDefault()}
+                >
+                  <span className="jump-icon">⇪</span>
+                  <span className="jump-title">SALTO</span>
+                  <small className="atk-sub">Impulso 3D</small>
                 </button>
 
                 {/* Botón de Ataque Básico */}
@@ -277,7 +401,7 @@ export default function TouchGamepad({
                   onContextMenu={(e) => e.preventDefault()}
                 >
                   <span className="atk-icon">✦</span>
-                  <span className="atk-title">ATAQUE BÁSICO</span>
+                  <span className="atk-title">ATAQUE</span>
                   <small className="atk-sub">{ch.basicAttack.name}</small>
                 </button>
               </div>

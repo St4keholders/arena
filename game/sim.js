@@ -12,6 +12,7 @@ import {
   ENEMY_TYPES,
 } from './constants.js';
 import { buildWaveQueue, stepEnemyAI, computeAutopilotInput } from './ai.js';
+import { eulerToQuat } from './mirror.js';
 
 // Obstáculos estáticos del mapa (pilares de obsidiana en las ruinas)
 export const STATIC_OBSTACLES = [
@@ -64,6 +65,7 @@ export class Sim {
       const x = Math.cos(angle) * dist;
       const z = Math.sin(angle) * dist;
       const def0 = ch.defenses[0] ? ch.defenses[0].id : null;
+      const rotY = angle + Math.PI;
       return {
         id: `h_${h.slot}`,
         slot: h.slot,
@@ -72,8 +74,16 @@ export class Sim {
         human: !h.autopilot,
         autopilot: !!h.autopilot,
         x,
+        y: 0,
         z,
-        rotY: angle + Math.PI,
+        vx: 0,
+        vy: 0,
+        vz: 0,
+        rotY,
+        camYaw: rotY,
+        camPitch: -0.22,
+        camQuat: eulerToQuat(-0.22, rotY, 0),
+        animState: 'idle',
         hp: ch.stats.hp,
         maxHp: ch.stats.hp,
         mana: this.diff.startMana,
@@ -95,13 +105,28 @@ export class Sim {
         buildType: def0,
         holoX: x,
         holoZ: z,
+        rayHoloX: null,
+        rayHoloZ: null,
         holoValid: true,
         kills: 0,
         built: 0,
         dmgDealt: 0,
         message: '',
         messageT: 0,
-        input: { moveX: 0, moveZ: 0, attack: false, power: false, place: false, selectDef: null },
+        input: {
+          moveX: 0,
+          moveZ: 0,
+          attack: false,
+          power: false,
+          place: false,
+          jump: false,
+          selectDef: null,
+          camYaw: rotY,
+          camPitch: -0.22,
+          camQuat: null,
+          rayX: null,
+          rayZ: null,
+        },
       };
     });
 
@@ -211,9 +236,17 @@ export class Sim {
 
   updateHeroHologram(hero) {
     const def = defenseById(hero.buildType || hero.ch.defenses[0].id);
-    const lookDist = 3.6;
-    const hx = hero.x + Math.sin(hero.rotY) * lookDist;
-    const hz = hero.z + Math.cos(hero.rotY) * lookDist;
+    let hx;
+    let hz;
+    if (Number.isFinite(hero.rayHoloX) && Number.isFinite(hero.rayHoloZ)) {
+      hx = hero.rayHoloX;
+      hz = hero.rayHoloZ;
+    } else {
+      const lookDist = 3.8;
+      const aimAngle = Number.isFinite(hero.camYaw) ? hero.camYaw : hero.rotY;
+      hx = hero.x + Math.sin(aimAngle) * lookDist;
+      hz = hero.z + Math.cos(aimAngle) * lookDist;
+    }
     hero.holoX = hx;
     hero.holoZ = hz;
     hero.holoValid = this.canPlaceDefense(hero, def, hx, hz);
@@ -392,23 +425,67 @@ export class Sim {
 
     const inp = h.autopilot || this.demo ? computeAutopilotInput(h, this) : h.input;
 
+    // Sincronizar orientación de cámara 3ra persona y cuaternión
+    if (Number.isFinite(inp.camYaw)) h.camYaw = inp.camYaw;
+    if (Number.isFinite(inp.camPitch)) h.camPitch = inp.camPitch;
+    if (Array.isArray(inp.camQuat) && inp.camQuat.length === 4) {
+      h.camQuat = inp.camQuat;
+    } else {
+      h.camQuat = eulerToQuat(h.camPitch || -0.22, h.camYaw ?? h.rotY ?? 0, 0);
+    }
+
+    // Raycasting en Fase de Forja sobre el NavMesh
+    if (Number.isFinite(inp.rayX) && Number.isFinite(inp.rayZ)) {
+      h.rayHoloX = inp.rayX;
+      h.rayHoloZ = inp.rayZ;
+    } else if (inp.rayX === null) {
+      h.rayHoloX = null;
+      h.rayHoloZ = null;
+    }
+
     // Selección de defensa
     if (inp.selectDef) {
       const validDef = h.ch.defenses.find((d) => d.id === inp.selectDef);
       if (validDef) h.buildType = validDef.id;
     }
 
-    // Movimiento
-    const mx = Number(inp.moveX) || 0;
-    const mz = Number(inp.moveZ) || 0;
+    // Salto y gravedad vertical (sincronizado con RigidBody de Rapier)
+    if (inp.jump && (h.y || 0) <= 0.08) {
+      h.vy = 9.6;
+      this.events.push({ type: 'sfx', name: 'select' });
+    }
+    if ((h.y || 0) > 0 || (h.vy || 0) !== 0) {
+      h.vy = (h.vy || 0) - 24.0 * dt;
+      h.y = Math.max(0, (h.y || 0) + h.vy * dt);
+      if (h.y === 0) h.vy = 0;
+    }
+
+    // Movimiento (relativo a la orientación de la cámara en 3ra persona o directo en Autopilot)
+    const rawX = Number(inp.moveX) || 0;
+    const rawZ = Number(inp.moveZ) || 0;
+    let mx = rawX;
+    let mz = rawZ;
+
+    if (!h.autopilot && !this.demo && inp.camRelative !== false && Number.isFinite(h.camYaw)) {
+      const yaw = h.camYaw;
+      // Forward = (sin(yaw), cos(yaw)), Right = (-cos(yaw), sin(yaw))
+      // rawZ negativo es adelante (W / Joystick arriba), rawX positivo es derecha (D / Joystick derecha)
+      const fwd = -rawZ;
+      const right = rawX;
+      mx = right * -Math.cos(yaw) + fwd * Math.sin(yaw);
+      mz = right * Math.sin(yaw) + fwd * Math.cos(yaw);
+    }
+
     const mLen = Math.hypot(mx, mz);
     if (mLen > 0.08) {
       const nx = mx / Math.max(1, mLen);
       const nz = mz / Math.max(1, mLen);
       const spdBoost = h.buffedT > 0 ? 1.35 : 1.0;
       const spd = h.ch.stats.speed * spdBoost;
-      let nextX = h.x + nx * spd * dt;
-      let nextZ = h.z + nz * spd * dt;
+      h.vx = nx * spd;
+      h.vz = nz * spd;
+      let nextX = h.x + h.vx * dt;
+      let nextZ = h.z + h.vz * dt;
 
       // Colisión con el Cristal de Éter y borde del mapa
       const distC = Math.hypot(nextX, nextZ);
@@ -422,13 +499,44 @@ export class Sim {
         nextZ *= pull;
       }
 
+      // Colisión con pilares estáticos y torretas sólidas
+      for (const obs of STATIC_OBSTACLES) {
+        const dx = nextX - obs.x;
+        const dz = nextZ - obs.z;
+        const d = Math.hypot(dx, dz);
+        const minR = obs.r + 0.85;
+        if (d < minR && d > 0.001) {
+          nextX = obs.x + (dx / d) * minR;
+          nextZ = obs.z + (dz / d) * minR;
+        }
+      }
+      for (const tu of this.turrets) {
+        if (tu.dead || tu.def.isTrap || tu.def.isAura) continue;
+        const dx = nextX - tu.x;
+        const dz = nextZ - tu.z;
+        const d = Math.hypot(dx, dz);
+        const minR = (tu.def.radius || 1.2) + 0.65;
+        if (d < minR && d > 0.001) {
+          nextX = tu.x + (dx / d) * minR;
+          nextZ = tu.z + (dz / d) * minR;
+        }
+      }
+
       h.x = nextX;
       h.z = nextZ;
       h.rotY = Math.atan2(nx, nz);
       h.moving = true;
     } else {
+      h.vx = 0;
+      h.vz = 0;
       h.moving = false;
+      // En modo 3ra persona quieto, alinear suavemente hacia la dirección de la cámara al apuntar
+      if (!h.autopilot && !this.demo && this.subPhase === 'horde' && Number.isFinite(h.camYaw)) {
+        h.rotY = h.camYaw;
+      }
     }
+
+    h.animState = h.attackT > 0 || h.castT > 0 ? 'attack' : h.moving ? 'run' : 'idle';
 
     this.updateHeroHologram(h);
 
@@ -440,11 +548,13 @@ export class Sim {
     // Ataque Básico
     if (inp.attack && h.atkCd <= 0) {
       this.performBasicAttack(h);
+      h.animState = 'attack';
     }
 
     // Habilidad Definitiva (Power)
     if (inp.power && h.powerCharge >= 100) {
       this.performUltimatePower(h);
+      h.animState = 'attack';
     }
   }
 

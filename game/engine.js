@@ -8,7 +8,7 @@ import {
 } from './constants.js';
 import { Sim } from './sim.js';
 import { peerOptionsFromURL, peerParamsString } from './peeropts.js';
-import { arenaInitMsg, snapshotMsg } from './mirror.js';
+import { arenaInitMsg, snapshotMsg, eulerToQuat } from './mirror.js';
 
 export { peerParamsString };
 
@@ -25,7 +25,8 @@ const KB = {
     right: ['KeyD'],
     up: ['KeyW'],
     down: ['KeyS'],
-    attack: ['Space'],
+    attack: ['KeyQ', 'KeyK'],
+    jump: ['Space'],
     power: ['KeyE'],
     place: ['KeyF'],
     def1: ['Digit1'],
@@ -37,6 +38,7 @@ const KB = {
     up: ['ArrowUp'],
     down: ['ArrowDown'],
     attack: ['Slash', 'Numpad0'],
+    jump: ['NumpadDecimal', 'RightControl'],
     power: ['Period', 'Numpad2'],
     place: ['ShiftRight', 'Numpad1'],
     def1: ['PageUp'],
@@ -172,6 +174,15 @@ export class GameHost {
     this.sfxOut = [];
     this.arenaInit = null;
 
+    // Controlador de cámara en 3ra persona y Raycasting en Host
+    this.cameraMode = 'auto'; // 'auto' (Forja=táctica, Horda=3ra persona) | 'third_person' | 'tactical'
+    this.camTargetSlot = 0;
+    this.hostCamYaw = Math.PI;
+    this.hostCamPitch = -0.22;
+    this.navRayX = null;
+    this.navRayZ = null;
+    this.mouseAttack = false;
+
     this.onKeyDown = this.onKeyDown.bind(this);
     this.onKeyUp = this.onKeyUp.bind(this);
     if (typeof window !== 'undefined') {
@@ -181,6 +192,50 @@ export class GameHost {
       this.loop = this.loop.bind(this);
       requestAnimationFrame(this.loop);
       this.initPeer();
+    }
+  }
+
+  rotateHostCamera(deltaYaw = 0, deltaPitch = 0) {
+    this.hostCamYaw -= deltaYaw;
+    this.hostCamPitch = Math.max(-0.78, Math.min(0.45, this.hostCamPitch - deltaPitch));
+  }
+
+  setNavMeshRay(x, z) {
+    this.navRayX = x;
+    this.navRayZ = z;
+  }
+
+  triggerNavMeshClick(isRightClick = false) {
+    if (this.phase !== 'playing' || !this.sim || this.paused) return;
+    const kbSlot = this.players.findIndex((p) => p && (p.kind === 'kbA' || p.kind === 'kbB'));
+    const targetSlot = kbSlot >= 0 ? kbSlot : this.camTargetSlot;
+    const pd = this.pend[targetSlot] || (this.pend[targetSlot] = {});
+    if (this.sim.subPhase === 'forge' || isRightClick) {
+      pd.place = true;
+    } else {
+      pd.attack = true;
+    }
+  }
+
+  toggleCameraMode() {
+    if (this.cameraMode === 'auto') {
+      this.cameraMode =
+        this.sim && this.sim.subPhase === 'forge' ? 'third_person' : 'tactical';
+    } else if (this.cameraMode === 'third_person') {
+      this.cameraMode = 'tactical';
+    } else {
+      this.cameraMode = 'auto';
+    }
+    this.changed();
+  }
+
+  cycleCamTarget() {
+    if (!this.sim || !this.sim.heroes.length) return;
+    const idx = this.sim.heroes.findIndex((h) => h.slot === this.camTargetSlot);
+    const next = this.sim.heroes[(idx + 1) % this.sim.heroes.length];
+    if (next) {
+      this.camTargetSlot = next.slot;
+      this.changed();
     }
   }
 
@@ -241,6 +296,8 @@ export class GameHost {
       victory: this.victory,
       paused: this.paused,
       muted: this.audio.muted,
+      cameraMode: this.cameraMode,
+      camTargetSlot: this.camTargetSlot,
     };
   }
 
@@ -442,11 +499,17 @@ export class GameHost {
 
     switch (msg.t) {
       case 'in': {
-        const prev = this.phoneIn[slot] || { ac: msg.ac || 0, pc: msg.pc || 0, bc: msg.bc || 0 };
+        const prev = this.phoneIn[slot] || {
+          ac: msg.ac || 0,
+          pc: msg.pc || 0,
+          bc: msg.bc || 0,
+          jc: msg.jc || 0,
+        };
         const pd = this.pend[slot] || (this.pend[slot] = {});
         if ((msg.ac || 0) > (prev.ac || 0)) pd.attack = true;
         if ((msg.pc || 0) > (prev.pc || 0)) pd.power = true;
         if ((msg.bc || 0) > (prev.bc || 0)) pd.place = true;
+        if ((msg.jc || 0) > (prev.jc || 0)) pd.jump = true;
         if (msg.def) pd.selectDef = msg.def;
         this.phoneIn[slot] = msg;
         p.lastSeen = performance.now();
@@ -602,6 +665,15 @@ export class GameHost {
         this.togglePause();
         return;
       }
+      if (code === 'KeyC') {
+        this.toggleCameraMode();
+        return;
+      }
+      if (code === 'Tab') {
+        e.preventDefault();
+        this.cycleCamTarget();
+        return;
+      }
       if (code === 'Enter' && this.sim && this.sim.subPhase === 'forge') {
         this.triggerHorde();
         return;
@@ -613,6 +685,7 @@ export class GameHost {
         const pd = this.pend[slot] || (this.pend[slot] = {});
         const ch = charById(this.players[slot].char);
         if (map.attack.includes(code)) pd.attack = true;
+        if (map.jump && map.jump.includes(code)) pd.jump = true;
         if (map.power.includes(code)) pd.power = true;
         if (map.place.includes(code)) pd.place = true;
         if (map.def1.includes(code) && ch.defenses[0]) pd.selectDef = ch.defenses[0].id;
@@ -700,6 +773,11 @@ export class GameHost {
       humans,
       demo: false,
     });
+    const firstHero = this.sim.heroes[0];
+    this.camTargetSlot = firstHero ? firstHero.slot : 0;
+    this.hostCamYaw = firstHero ? firstHero.rotY : Math.PI;
+    this.hostCamPitch = -0.22;
+    this.cameraMode = 'auto';
     this.phase = 'playing';
     this.paused = false;
     this.results = null;
@@ -810,34 +888,63 @@ export class GameHost {
     for (const h of this.sim.heroes) {
       const p = this.players[h.slot];
       const pd = this.pend[h.slot] || {};
-      let base = { moveX: 0, moveZ: 0, attack: false };
+      let base = {
+        moveX: 0,
+        moveZ: 0,
+        attack: false,
+        camYaw: h.camYaw ?? h.rotY ?? Math.PI,
+        camPitch: h.camPitch ?? -0.22,
+        camQuat: h.camQuat || null,
+        camRelative: true,
+        rayX: null,
+        rayZ: null,
+      };
 
       if (!p) {
         h.autopilot = true;
+        base.camRelative = false;
       } else if (p.kind === 'phone') {
         const m = this.phoneIn[h.slot];
         const stale = !p.lastSeen || performance.now() - p.lastSeen > 3500;
         h.autopilot = !p.connected || stale;
         if (m) {
+          const cy = Number.isFinite(m.cy) ? Number(m.cy) : h.camYaw ?? h.rotY ?? Math.PI;
+          const cp = Number.isFinite(m.cp) ? Number(m.cp) : h.camPitch ?? -0.22;
           base = {
             moveX: Math.max(-1, Math.min(1, Number(m.x) || 0)),
             moveZ: Math.max(-1, Math.min(1, Number(m.z) || 0)),
             attack: !!m.atk || !!pd.attack,
+            camYaw: cy,
+            camPitch: cp,
+            camQuat: Array.isArray(m.cq) && m.cq.length === 4 ? m.cq : eulerToQuat(cp, cy, 0),
+            camRelative: true,
+            rayX: null,
+            rayZ: null,
           };
           if (m.def) pd.selectDef = m.def;
         }
       } else {
         h.autopilot = false;
         const kb = this.kbInput(p.kind);
+        const isPrimaryKb = p.kind === 'kbA';
+        const cy = isPrimaryKb ? this.hostCamYaw : Math.PI;
+        const cp = isPrimaryKb ? this.hostCamPitch : -0.25;
         base = {
           moveX: kb.moveX,
           moveZ: kb.moveZ,
-          attack: kb.attack || !!pd.attack,
+          attack: kb.attack || !!pd.attack || (isPrimaryKb && this.mouseAttack),
+          camYaw: cy,
+          camPitch: cp,
+          camQuat: eulerToQuat(cp, cy, 0),
+          camRelative: true,
+          rayX: isPrimaryKb ? this.navRayX : null,
+          rayZ: isPrimaryKb ? this.navRayZ : null,
         };
       }
 
       h.input = {
         ...base,
+        jump: !!pd.jump,
         power: !!pd.power,
         place: !!pd.place,
         selectDef: pd.selectDef || null,
